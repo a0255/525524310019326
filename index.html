@@ -1,6 +1,86 @@
-{
-"user": "isni",
-"title": "nen",
-"id": "1",
-"description": "product"
-},
+#!/usr/bin/tclsh
+package require ubit_tcl 1.0
+# Osb.001207 EZweb対応
+source /imo/fcgi/pc1.tcl
+source /imo/fcgi/pi0.tcl
+source /imo/fcgi/iplist.tcl
+set xxxmonip "210.253.156.31"
+
+### EZweb端末をEZ用トップCGIへ導く
+proc loc_eztop {} {
+    global env
+
+    #fcgi_puts "Location: http://104.com/telde/reg/r1\n\n"
+    # 無料電話案内
+    fcgi_puts "Location: http://$env(SERVER_NAME)/mobile/\n\n"
+}
+
+### JSkyWeb端末にJSky用ページへのリンクを表示する
+proc put_jsky {} {
+    global SID
+
+    set html    "<html><head><title>104.com</title></head><body>"
+    append html "<CENTER><FONT COLOR=#EA3A00>104.com<BR>無料電話案内<BR></FONT>"
+    append html "<HR SIZE=1 COLOR=#EA3A00></CENTER>"
+    append html "申し訳ありません。無料電話案内は Vodafone live! には対応しておりません。<br>"
+    append html "<HR SIZE=1 COLOR=#EA3A00>"
+    append html "<a href=\"http://104.com/j/x/reg/r1?uid=1&sid=A473&pid=P211\">XXX-ｷｽｷｽｷｽはこちら</a><br>"
+    append html "</body></html>"
+    
+    fcgi_puts "Content-type: text/html\n\n[kanji conversion EUC SJIS $html]"
+}
+
+### 未使用
+proc do_branch {useragent} {
+    if {[regexp {^DoCoMo} $useragent] > 0} {
+	#imode
+	loc_usrreg
+    } else {
+	#webBrowser
+	loc_104hp
+    }
+}
+
+### i-mode,JSkyWeb,その他の処理振り分け
+proc do_branch2 {remote} {
+    global xxxmonip env
+
+    if {[::ubit_tcl::is_imode_proxy_server $remote] || [::ubit_tcl::is_softbank_proxy_server $remote] || $remote == $xxxmonip} {
+        fcgi_puts "Location: http://$env(SERVER_NAME)/mobile/\n\n"
+    } else {
+	#others (PC)
+        # 無料電話案内
+        fcgi_puts "Location: http://$env(SERVER_NAME)/wtel/\n\n"
+
+    }
+}
+
+proc put_msg {msg} {
+    fcgi_puts "Content-type: text/plain\n\n[kanji conversion EUC SJIS $msg]"
+}
+
+# START
+while {[fcgi_accept] >= 0} {
+    if ![info exists env(FAST_CGI)] {
+	proc fcgi_puts {cts} {puts "$cts"}
+    }
+
+    #if [catch {fcgi_get_query} rs] {
+	#append_log "idxm bad_query $rs"
+	#put_msg "invalid access"
+	#continue
+    #}
+
+    if [info exists env(HTTP_X_UP_SUBNO)] {
+	### EZweb
+	loc_eztop
+    } elseif [info exists env(REMOTE_ADDR)] {
+	### i-mode,JSkyWeb,Others
+	if [catch {do_branch2 $env(REMOTE_ADDR)}] {caperr idxm}
+    } else {
+	### invalid access
+	append_log "idxm miss_env REMOTE_ADDR"
+	put_msg "invalid access"
+    }
+}
+exit 0
